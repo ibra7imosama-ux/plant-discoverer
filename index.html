@@ -1,0 +1,1105 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>نباتي - تشخيص النباتات بالذكاء الاصطناعي</title>
+    <meta name="description" content="تطبيق نباتي - تعرف على أنواع النباتات وشخّص أمراضها بدقة عالية باستخدام Plant.id API v3 و Claude AI">
+    <meta name="author" content="أمنة إبراهيم أحمد, محمد بابكر حسن, جلال الدين عمر, ضياء الدين زكريا">
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌿</text></svg>">
+    <meta name="theme-color" content="#166534">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { cairo: ['Cairo', 'sans-serif'] },
+                    colors: {
+                        primary: {
+                            50: '#f0fdf4', 100: '#dcfce7', 200: '#bbf7d0', 300: '#86efac',
+                            400: '#4ade80', 500: '#22c55e', 600: '#16a34a', 700: '#15803d',
+                            800: '#166534', 900: '#14532d',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        * { font-family: 'Cairo', sans-serif; }
+        .gradient-bg { background: linear-gradient(135deg, #166534 0%, #22c55e 50%, #15803d 100%); }
+        .glass-card { background: rgba(255,255,255,0.97); backdrop-filter: blur(20px); }
+        .upload-zone { background: linear-gradient(145deg, #f3f4f6 0%, #e5e7eb 100%); border: 3px dashed #d1d5db; transition: all 0.3s ease; }
+        .upload-zone:hover, .upload-zone.drag-over { border-color: #22c55e; background: linear-gradient(145deg, #dcfce7 0%, #bbf7d0 100%); }
+        .pulse-ring { animation: pulse-ring 2s infinite; }
+        @keyframes pulse-ring { 0%{transform:scale(1);opacity:1;} 50%{transform:scale(1.05);opacity:0.8;} 100%{transform:scale(1);opacity:1;} }
+        .float-animation { animation: float 3s ease-in-out infinite; }
+        @keyframes float { 0%,100%{transform:translateY(0);} 50%{transform:translateY(-10px);} }
+        .fade-in { animation: fadeIn 0.5s ease-out; }
+        @keyframes fadeIn { from{opacity:0;transform:translateY(20px);} to{opacity:1;transform:translateY(0);} }
+        .loading-spinner { border:4px solid #e5e7eb; border-top:4px solid #22c55e; border-radius:50%; width:50px; height:50px; animation:spin 1s linear infinite; }
+        @keyframes spin { 0%{transform:rotate(0deg);} 100%{transform:rotate(360deg);} }
+        .confidence-bar { transition: width 1.2s ease-out; }
+        .nav-blur { backdrop-filter:blur(12px); background:rgba(255,255,255,0.88); }
+        .result-card { transition: all 0.3s ease; }
+        .result-card:hover { transform:translateY(-4px); box-shadow:0 20px 40px rgba(0,0,0,0.1); }
+        .modal-overlay { transition: opacity 0.3s ease; }
+        .modal-overlay.hidden { opacity:0; pointer-events:none; }
+        .save-btn:not(:disabled) { animation: pulse-save 1.5s ease-in-out infinite; }
+        @keyframes pulse-save { 0%,100%{transform:scale(1);box-shadow:0 0 0 0 rgba(34,197,94,0.4);} 50%{transform:scale(1.04);box-shadow:0 0 0 10px rgba(34,197,94,0);} }
+        .leaf-pattern { background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%2322c55e' fill-opacity='0.06'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E"); }
+        ::-webkit-scrollbar { width:8px; }
+        ::-webkit-scrollbar-track { background:#f1f1f1; border-radius:10px; }
+        ::-webkit-scrollbar-thumb { background:#22c55e; border-radius:10px; }
+        
+        /* Claude AI typewriter effect */
+        .ai-typing::after { content:'▌'; animation: blink 0.7s infinite; }
+        @keyframes blink { 0%,50%{opacity:1;} 51%,100%{opacity:0;} }
+        
+        /* Disease severity badge */
+        .severity-high { background:#fee2e2; color:#991b1b; border:1px solid #fca5a5; }
+        .severity-medium { background:#fef3c7; color:#92400e; border:1px solid #fcd34d; }
+        .severity-low { background:#d1fae5; color:#065f46; border:1px solid #6ee7b7; }
+
+        /* Tab active style */
+        .tab-active { background: linear-gradient(135deg, #166534, #22c55e); color: white; }
+        .tab-inactive { background: #f3f4f6; color: #374151; }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen leaf-pattern">
+
+    <!-- ===== SETTINGS MODAL ===== -->
+    <div id="settingsModal" class="modal-overlay hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onclick="closeSettings(event)">
+        <div class="bg-white rounded-3xl max-w-2xl w-full max-h-[90vh] overflow-hidden shadow-2xl" onclick="event.stopPropagation()">
+            <div class="p-6 bg-gradient-to-l from-primary-50 to-white border-b border-gray-200 flex justify-between items-center">
+                <h2 class="text-2xl font-bold text-gray-800 flex items-center gap-3">
+                    <span class="w-10 h-10 bg-gradient-to-br from-primary-400 to-primary-600 rounded-xl flex items-center justify-center text-white">⚙️</span>
+                    الإعدادات
+                </h2>
+                <button onclick="closeSettingsModal()" class="w-10 h-10 bg-gray-100 hover:bg-gray-200 rounded-xl flex items-center justify-center transition">✕</button>
+            </div>
+            <div class="p-6 overflow-y-auto max-h-[calc(90vh-160px)] space-y-5">
+
+                <!-- Plant.id API Key -->
+                <div class="bg-gray-50 rounded-2xl p-5">
+                    <label class="block text-lg font-semibold text-gray-800 mb-2">🔑 Plant.id API Key (Kindwise)</label>
+                    <input type="password" id="settingsApiKey" placeholder="أدخل مفتاح Plant.id API..."
+                           class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-primary-500 focus:outline-none text-base" oninput="markUnsaved()">
+                    <p class="text-sm text-gray-500 mt-2">احصل على مفتاح مجاني من <a href="https://web.plant.id/" target="_blank" class="text-primary-600 underline">Kindwise Plant.id</a></p>
+                </div>
+
+                <!-- Claude API Key -->
+                <div class="bg-blue-50 rounded-2xl p-5 border border-blue-200">
+                    <label class="block text-lg font-semibold text-gray-800 mb-2">🤖 Claude API Key (للتشخيص الذكي)</label>
+                    <input type="password" id="settingsClaudeKey" placeholder="أدخل مفتاح Claude API من Anthropic..."
+                           class="w-full px-4 py-3 rounded-xl border-2 border-blue-200 focus:border-blue-500 focus:outline-none text-base" oninput="markUnsaved()">
+                    <p class="text-sm text-gray-500 mt-2">اختياري - يُفعّل التشخيص الذكي المفصّل. احصل عليه من <a href="https://console.anthropic.com/" target="_blank" class="text-blue-600 underline">Anthropic Console</a></p>
+                </div>
+
+                <!-- Plant Details Options -->
+                <div class="bg-gray-50 rounded-2xl p-5">
+                    <label class="block text-lg font-semibold text-gray-800 mb-4">📋 تفاصيل النبات</label>
+                    <div class="space-y-3">
+                        <label class="flex items-center justify-between cursor-pointer p-3 bg-white rounded-xl hover:bg-primary-50 transition">
+                            <span class="text-base text-gray-700">الأسماء الشائعة</span>
+                            <input type="checkbox" id="optCommonNames" checked onchange="markUnsaved()" class="w-5 h-5 text-primary-600 rounded">
+                        </label>
+                        <label class="flex items-center justify-between cursor-pointer p-3 bg-white rounded-xl hover:bg-primary-50 transition">
+                            <span class="text-base text-gray-700">التصنيف العلمي</span>
+                            <input type="checkbox" id="optTaxonomy" checked onchange="markUnsaved()" class="w-5 h-5 text-primary-600 rounded">
+                        </label>
+                        <label class="flex items-center justify-between cursor-pointer p-3 bg-white rounded-xl hover:bg-primary-50 transition">
+                            <span class="text-base text-gray-700">وصف ويكيبيديا</span>
+                            <input type="checkbox" id="optWiki" onchange="markUnsaved()" class="w-5 h-5 text-primary-600 rounded">
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Image Quality -->
+                <div class="bg-gray-50 rounded-2xl p-5">
+                    <label class="block text-lg font-semibold text-gray-800 mb-3">📷 جودة التحليل</label>
+                    <select id="settingsQuality" onchange="markUnsaved()" class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-primary-500 focus:outline-none text-base bg-white">
+                        <option value="high">عالية (أكثر دقة)</option>
+                        <option value="medium" selected>متوسطة (موصى بها)</option>
+                        <option value="low">سريعة (أقل دقة)</option>
+                    </select>
+                </div>
+
+                <!-- Team -->
+                <div class="bg-gradient-to-l from-purple-50 to-white rounded-2xl p-5 border border-purple-200">
+                    <label class="block text-lg font-semibold text-gray-800 mb-3">👥 تصميم وتطوير</label>
+                    <div class="grid grid-cols-2 gap-2">
+                        <div class="bg-white rounded-xl p-3 border border-purple-200 text-center"><p class="font-bold text-gray-700 text-sm">أمنة إبراهيم أحمد</p></div>
+                        <div class="bg-white rounded-xl p-3 border border-gray-200 text-center"><p class="font-bold text-gray-700 text-sm">محمد بابكر حسن</p></div>
+                        <div class="bg-white rounded-xl p-3 border border-gray-200 text-center"><p class="font-bold text-gray-700 text-sm">جلال الدين عمر</p></div>
+                        <div class="bg-white rounded-xl p-3 border border-gray-200 text-center"><p class="font-bold text-gray-700 text-sm">ضياء الدين زكريا</p></div>
+                    </div>
+                </div>
+
+                <!-- Contact -->
+                <div class="bg-gradient-to-l from-green-50 to-white rounded-2xl p-5 border border-green-200">
+                    <label class="block text-lg font-semibold text-gray-800 mb-3">📞 تواصل معنا</label>
+                    <a href="https://wa.me/249127848683" target="_blank" class="flex items-center justify-center gap-3 bg-green-500 hover:bg-green-600 text-white rounded-xl p-4 transition font-bold">
+                        <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+                        <span>تواصل عبر واتساب</span>
+                        <span dir="ltr">+249127848683</span>
+                    </a>
+                </div>
+            </div>
+
+            <div class="p-6 bg-gray-50 border-t border-gray-200">
+                <div class="flex items-center justify-between">
+                    <button onclick="clearCache()" class="px-4 py-2 bg-red-50 text-red-600 rounded-xl hover:bg-red-100 transition text-sm font-medium">🗑️ مسح البيانات</button>
+                    <button id="saveBtn" onclick="saveAllSettings()" disabled
+                            class="save-btn px-8 py-3 bg-gradient-to-l from-primary-500 to-primary-600 text-white rounded-xl font-bold hover:from-primary-600 hover:to-primary-700 transition disabled:opacity-50 disabled:cursor-not-allowed shadow-lg">
+                        💾 حفظ الإعدادات
+                    </button>
+                </div>
+                <p id="saveStatus" class="text-center text-sm text-green-600 font-medium mt-3 hidden">✓ تم حفظ الإعدادات بنجاح!</p>
+                <div class="mt-4 pt-4 border-t border-gray-200 text-center">
+                    <p class="text-xs text-gray-400">مدعوم بـ <a href="https://plant.id" target="_blank" class="text-primary-600">Plant.id API v3</a> و <a href="https://anthropic.com" target="_blank" class="text-blue-600">Claude AI</a></p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== NAVIGATION ===== -->
+    <nav class="fixed top-0 left-0 right-0 z-40 nav-blur border-b border-gray-200">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center h-16">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center float-animation">
+                        <svg class="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M17 8C8 10 5.9 16.17 3.82 21H5.71C7.77 15.9 12.14 12.37 20 12C19.09 11.36 17 8 17 8z"/><path d="M10.67 5.82C11.88 5.29 13 5 14 5c-0.65 4.07-2.89 6.48-5.75 7.73C9.26 10.95 9.29 8.35 10.67 5.82z"/></svg>
+                    </div>
+                    <div>
+                        <span class="text-xl font-bold bg-gradient-to-l from-primary-600 to-primary-800 bg-clip-text text-transparent">نباتي</span>
+                        <span class="text-xs text-gray-400 block -mt-1">Plant Diagnosis AI</span>
+                    </div>
+                </div>
+                <button onclick="openSettings()" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-xl flex items-center gap-2 transition text-sm font-medium text-gray-700">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                    الإعدادات
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- ===== HERO ===== -->
+    <section class="pt-24 pb-10 px-4 gradient-bg relative overflow-hidden">
+        <div class="absolute inset-0 opacity-10">
+            <div class="absolute top-20 right-20 w-64 h-64 bg-white rounded-full blur-3xl"></div>
+            <div class="absolute bottom-10 left-20 w-96 h-96 bg-white rounded-full blur-3xl"></div>
+        </div>
+        <div class="max-w-7xl mx-auto relative text-center text-white py-8">
+            <div class="inline-flex items-center gap-2 bg-white/20 backdrop-blur rounded-full px-4 py-2 mb-4 fade-in">
+                <span class="w-2 h-2 bg-green-300 rounded-full animate-pulse"></span>
+                <span class="text-sm font-medium">Plant.id API v3 + Claude AI</span>
+            </div>
+            <h1 class="text-4xl md:text-5xl font-bold mb-3 fade-in">🌿 اكتشف عالم النباتات</h1>
+            <p class="text-lg md:text-xl text-white/90 max-w-2xl mx-auto fade-in" style="animation-delay:0.2s">
+                تعرف على نباتاتك وشخّص أمراضها بدقة عالية باستخدام أحدث تقنيات الذكاء الاصطناعي
+            </p>
+            <div class="flex justify-center gap-6 mt-6 text-white/80 text-sm fade-in">
+                <div class="flex items-center gap-1"><span>🎯</span> دقة عالية</div>
+                <div class="flex items-center gap-1"><span>⚡</span> نتائج فورية</div>
+                <div class="flex items-center gap-1"><span>🌍</span> آلاف النباتات</div>
+                <div class="flex items-center gap-1"><span>💊</span> علاج مفصّل</div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ===== MAIN APP ===== -->
+    <section class="py-10 px-4" id="app">
+        <div class="max-w-5xl mx-auto">
+            <div class="glass-card rounded-3xl shadow-2xl overflow-hidden">
+
+                <!-- Upload Area -->
+                <div id="uploadArea" class="p-8">
+                    <div id="dropZone" class="upload-zone rounded-3xl p-10 text-center cursor-pointer"
+                         ondrop="handleDrop(event)" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)"
+                         onclick="document.getElementById('fileInput').click()">
+
+                        <div id="uploadContent" class="space-y-6">
+                            <div class="w-24 h-24 mx-auto bg-gradient-to-br from-primary-100 to-primary-200 rounded-full flex items-center justify-center pulse-ring">
+                                <svg class="w-12 h-12 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                                </svg>
+                            </div>
+                            <div>
+                                <h3 class="text-2xl font-bold text-gray-700 mb-2">📸 ارفع صورة النبات</h3>
+                                <p class="text-gray-500">اسحب الصورة هنا أو انقر للاختيار</p>
+                                <p class="text-sm text-gray-400 mt-1">PNG, JPG, WEBP - حتى 10MB</p>
+                            </div>
+                            <div class="flex justify-center gap-4 flex-wrap">
+                                <label class="cursor-pointer px-6 py-3 bg-primary-500 text-white rounded-xl font-semibold hover:bg-primary-600 transition shadow-lg flex items-center gap-2">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+                                    رفع صورة
+                                    <input type="file" id="fileInput" accept="image/*" class="hidden" onchange="handleFileSelect(event)">
+                                </label>
+                                <button onclick="openCamera(event)" class="px-6 py-3 bg-gradient-to-l from-purple-500 to-purple-600 text-white rounded-xl font-semibold hover:from-purple-600 hover:to-purple-700 transition shadow-lg flex items-center gap-2">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                                    كاميرا
+                                </button>
+                            </div>
+                        </div>
+
+                        <div id="previewContent" class="hidden">
+                            <div class="relative inline-block">
+                                <img id="previewImage" src="" alt="معاينة" class="max-h-72 rounded-2xl shadow-xl mx-auto">
+                                <button onclick="clearImage(event)" class="absolute -top-3 -left-3 w-10 h-10 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 transition shadow-lg text-xl">✕</button>
+                            </div>
+                            <p id="fileName" class="mt-4 text-gray-600 font-medium"></p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Camera Modal -->
+                <div id="cameraModal" class="hidden fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
+                    <div class="bg-white rounded-3xl overflow-hidden max-w-lg w-full">
+                        <div class="p-4 bg-gradient-to-l from-purple-500 to-purple-600 text-white flex justify-between items-center">
+                            <h3 class="font-bold text-lg">📷 التقاط صورة</h3>
+                            <button onclick="closeCamera()" class="w-8 h-8 bg-white/20 rounded-full flex items-center justify-center hover:bg-white/30 transition">✕</button>
+                        </div>
+                        <div class="p-4">
+                            <video id="cameraVideo" autoplay playsinline class="w-full rounded-xl bg-black aspect-video"></video>
+                            <canvas id="cameraCanvas" class="hidden"></canvas>
+                            <div class="flex justify-center gap-4 mt-4">
+                                <button onclick="capturePhoto()" class="px-8 py-3 bg-gradient-to-l from-purple-500 to-purple-600 text-white rounded-xl font-semibold hover:from-purple-600 hover:to-purple-700 transition">📸 التقاط</button>
+                                <button onclick="closeCamera()" class="px-8 py-3 bg-gray-200 text-gray-700 rounded-xl font-semibold hover:bg-gray-300 transition">إلغاء</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Loading State -->
+                <div id="loadingState" class="hidden p-16 text-center">
+                    <div class="loading-spinner mx-auto mb-6"></div>
+                    <h3 class="text-2xl font-bold text-gray-800 mb-2" id="loadingTitle">🔄 جاري التحليل...</h3>
+                    <p class="text-gray-600" id="loadingText">يتم التعرف على النبات وتحليل حالته الصحية</p>
+                    <div class="mt-6 max-w-md mx-auto">
+                        <div class="h-3 bg-gray-200 rounded-full overflow-hidden">
+                            <div id="progressBar" class="h-full bg-gradient-to-l from-primary-400 to-primary-600 rounded-full transition-all duration-500" style="width:0%"></div>
+                        </div>
+                        <p class="text-xs text-gray-400 mt-2" id="progressText">0%</p>
+                    </div>
+                </div>
+
+                <!-- Results Section -->
+                <div id="resultsSection" class="hidden">
+                    <div class="p-8 space-y-6">
+
+                        <!-- Summary Banner -->
+                        <div id="summaryBanner" class="rounded-2xl overflow-hidden"></div>
+
+                        <!-- Tab Navigation -->
+                        <div class="flex gap-2 bg-gray-100 rounded-2xl p-1">
+                            <button onclick="switchTab('identification')" id="tab-identification" class="tab-active flex-1 py-3 px-4 rounded-xl font-bold text-sm transition-all">🌿 التعرف على النبات</button>
+                            <button onclick="switchTab('diagnosis')" id="tab-diagnosis" class="tab-inactive flex-1 py-3 px-4 rounded-xl font-bold text-sm transition-all">🔬 التشخيص الصحي</button>
+                            <button onclick="switchTab('treatment')" id="tab-treatment" class="tab-inactive flex-1 py-3 px-4 rounded-xl font-bold text-sm transition-all">💊 العلاج والوقاية</button>
+                        </div>
+
+                        <!-- Tab: Identification -->
+                        <div id="panel-identification" class="fade-in">
+                            <div class="result-card bg-gradient-to-l from-primary-50 to-white rounded-2xl p-6 border border-primary-200">
+                                <h2 class="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">🌿 معلومات النبات</h2>
+                                <div id="plantInfoContent"></div>
+                                <!-- Other Suggestions -->
+                                <div id="otherSuggestions" class="mt-4 hidden">
+                                    <p class="text-sm font-semibold text-gray-600 mb-2">احتمالات أخرى:</p>
+                                    <div id="otherSuggestionsList" class="flex flex-wrap gap-2"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Tab: Diagnosis -->
+                        <div id="panel-diagnosis" class="hidden fade-in">
+                            <div id="diagnosisContent" class="space-y-4"></div>
+                        </div>
+
+                        <!-- Tab: Treatment -->
+                        <div id="panel-treatment" class="hidden fade-in">
+                            <div id="treatmentContent" class="space-y-4"></div>
+                            <!-- Claude AI Section -->
+                            <div id="claudeSection" class="hidden mt-4">
+                                <div class="bg-gradient-to-l from-blue-50 to-white rounded-2xl p-6 border border-blue-200">
+                                    <div class="flex items-center gap-3 mb-4">
+                                        <div class="w-10 h-10 bg-gradient-to-br from-blue-400 to-purple-500 rounded-xl flex items-center justify-center text-white text-lg">🤖</div>
+                                        <div>
+                                            <h3 class="font-bold text-gray-800">تشخيص Claude AI المفصّل</h3>
+                                            <p class="text-xs text-gray-500">تحليل ذكي متعمق بالعربية</p>
+                                        </div>
+                                        <div id="claudeLoading" class="mr-auto hidden">
+                                            <div class="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                                        </div>
+                                    </div>
+                                    <div id="claudeOutput" class="text-gray-700 leading-relaxed text-sm whitespace-pre-wrap"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Retry Button -->
+                        <div class="text-center mt-6 pb-2">
+                            <button onclick="resetApp()" class="px-8 py-3 bg-gray-100 text-gray-700 rounded-xl font-semibold hover:bg-gray-200 transition flex items-center gap-2 mx-auto">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                                تحليل صورة جديدة
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- Quick Disease Reference -->
+            <div class="mt-8 bg-white rounded-3xl shadow-lg p-6">
+                <h3 class="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">📚 دليل الأمراض الشائعة</h3>
+                <div class="grid gap-3 grid-cols-2 md:grid-cols-3 lg:grid-cols-6">
+                    <div class="bg-amber-50 rounded-xl p-3 border border-amber-200 text-center"><div class="text-2xl mb-1">🟤</div><p class="font-bold text-xs text-gray-700">الصدأ الفطري</p><p class="text-xs text-gray-500 mt-1">بقع برتقالية</p></div>
+                    <div class="bg-gray-50 rounded-xl p-3 border border-gray-200 text-center"><div class="text-2xl mb-1">⬜</div><p class="font-bold text-xs text-gray-700">البياض الدقيقي</p><p class="text-xs text-gray-500 mt-1">طبقة بيضاء</p></div>
+                    <div class="bg-red-50 rounded-xl p-3 border border-red-200 text-center"><div class="text-2xl mb-1">⚫</div><p class="font-bold text-xs text-gray-700">بقعة الأوراق</p><p class="text-xs text-gray-500 mt-1">بقع داكنة</p></div>
+                    <div class="bg-yellow-50 rounded-xl p-3 border border-yellow-200 text-center"><div class="text-2xl mb-1">🟡</div><p class="font-bold text-xs text-gray-700">الاصفرار</p><p class="text-xs text-gray-500 mt-1">نقص تغذية</p></div>
+                    <div class="bg-green-50 rounded-xl p-3 border border-green-200 text-center"><div class="text-2xl mb-1">🐛</div><p class="font-bold text-xs text-gray-700">المن والآفات</p><p class="text-xs text-gray-500 mt-1">حشرات صغيرة</p></div>
+                    <div class="bg-brown-50 rounded-xl p-3 border border-stone-200 text-center bg-stone-50"><div class="text-2xl mb-1">💧</div><p class="font-bold text-xs text-gray-700">تعفن الجذور</p><p class="text-xs text-gray-500 mt-1">إفراط في الري</p></div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <script>
+    // ============================================================
+    // STATE
+    // ============================================================
+    var selectedImage = null;
+    var stream = null;
+    var hasUnsavedChanges = false;
+    var currentApiData = null; // store last API response
+
+    var plantIdApiKey = localStorage.getItem('plantIdApiKey') || '';
+    var claudeApiKey = localStorage.getItem('claudeApiKey') || '';
+
+    var settings;
+    try {
+        var s = localStorage.getItem('plantIdSettings');
+        settings = s ? JSON.parse(s) : null;
+        if (!settings || typeof settings !== 'object') throw new Error();
+    } catch(e) {
+        settings = { common_names: true, taxonomy: true, wiki_description: false, quality: 'medium' };
+    }
+
+    // ============================================================
+    // SETTINGS
+    // ============================================================
+    document.addEventListener('DOMContentLoaded', loadSettings);
+
+    function loadSettings() {
+        document.getElementById('settingsApiKey').value = plantIdApiKey;
+        document.getElementById('settingsClaudeKey').value = claudeApiKey;
+        document.getElementById('settingsQuality').value = settings.quality;
+        document.getElementById('optCommonNames').checked = settings.common_names;
+        document.getElementById('optTaxonomy').checked = settings.taxonomy;
+        document.getElementById('optWiki').checked = settings.wiki_description;
+        hasUnsavedChanges = false;
+        updateSaveButton();
+    }
+
+    function markUnsaved() { hasUnsavedChanges = true; updateSaveButton(); }
+
+    function updateSaveButton() {
+        var btn = document.getElementById('saveBtn');
+        var status = document.getElementById('saveStatus');
+        btn.disabled = !hasUnsavedChanges;
+        if (hasUnsavedChanges) status.classList.add('hidden');
+    }
+
+    function saveAllSettings() {
+        plantIdApiKey = document.getElementById('settingsApiKey').value.trim();
+        claudeApiKey = document.getElementById('settingsClaudeKey').value.trim();
+        settings.quality = document.getElementById('settingsQuality').value;
+        settings.common_names = document.getElementById('optCommonNames').checked;
+        settings.taxonomy = document.getElementById('optTaxonomy').checked;
+        settings.wiki_description = document.getElementById('optWiki').checked;
+        localStorage.setItem('plantIdApiKey', plantIdApiKey);
+        localStorage.setItem('claudeApiKey', claudeApiKey);
+        localStorage.setItem('plantIdSettings', JSON.stringify(settings));
+        hasUnsavedChanges = false;
+        updateSaveButton();
+        var status = document.getElementById('saveStatus');
+        status.classList.remove('hidden');
+        status.textContent = '✓ تم حفظ الإعدادات بنجاح!';
+        setTimeout(function() {
+            document.getElementById('settingsModal').classList.add('hidden');
+            document.body.style.overflow = 'auto';
+        }, 900);
+    }
+
+    function openSettings() {
+        loadSettings();
+        document.getElementById('settingsModal').classList.remove('hidden');
+        document.body.style.overflow = 'hidden';
+    }
+
+    function closeSettings(event) { if (event.target.id === 'settingsModal') closeSettingsModal(); }
+
+    function closeSettingsModal() {
+        if (hasUnsavedChanges && confirm('لديك تغييرات غير محفوظة. هل تريد حفظها؟')) saveAllSettings();
+        document.getElementById('settingsModal').classList.add('hidden');
+        document.body.style.overflow = 'auto';
+    }
+
+    function clearCache() {
+        if (!confirm('هل أنت متأكد من مسح جميع البيانات؟')) return;
+        localStorage.removeItem('plantIdApiKey');
+        localStorage.removeItem('claudeApiKey');
+        localStorage.removeItem('plantIdSettings');
+        plantIdApiKey = ''; claudeApiKey = '';
+        settings = { common_names: true, taxonomy: true, wiki_description: false, quality: 'medium' };
+        loadSettings();
+        alert('تم مسح البيانات بنجاح!');
+    }
+
+    // ============================================================
+    // FILE HANDLING
+    // ============================================================
+    function handleDragOver(e) { e.preventDefault(); document.getElementById('dropZone').classList.add('drag-over'); }
+    function handleDragLeave(e) { e.preventDefault(); document.getElementById('dropZone').classList.remove('drag-over'); }
+
+    function handleDrop(e) {
+        e.preventDefault();
+        document.getElementById('dropZone').classList.remove('drag-over');
+        var file = e.dataTransfer.files[0];
+        if (file && file.type.startsWith('image/')) processImage(file);
+    }
+
+    function handleFileSelect(e) { var file = e.target.files[0]; if (file) processImage(file); }
+
+    function processImage(file) {
+        selectedImage = file;
+        var reader = new FileReader();
+        reader.onload = function(e) {
+            document.getElementById('previewImage').src = e.target.result;
+            document.getElementById('uploadContent').classList.add('hidden');
+            document.getElementById('previewContent').classList.remove('hidden');
+            document.getElementById('fileName').textContent = file.name;
+            setTimeout(analyzeImage, 400);
+        };
+        reader.readAsDataURL(file);
+    }
+
+    function clearImage(e) {
+        e.stopPropagation();
+        selectedImage = null;
+        document.getElementById('fileInput').value = '';
+        document.getElementById('uploadContent').classList.remove('hidden');
+        document.getElementById('previewContent').classList.add('hidden');
+        document.getElementById('resultsSection').classList.add('hidden');
+    }
+
+    // ============================================================
+    // CAMERA
+    // ============================================================
+    async function openCamera(e) {
+        e.stopPropagation();
+        try {
+            stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+            document.getElementById('cameraVideo').srcObject = stream;
+            document.getElementById('cameraModal').classList.remove('hidden');
+        } catch(err) { alert('تعذر الوصول إلى الكاميرا: ' + err.message); }
+    }
+
+    function closeCamera() {
+        if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+        document.getElementById('cameraModal').classList.add('hidden');
+    }
+
+    function capturePhoto() {
+        var video = document.getElementById('cameraVideo');
+        var canvas = document.getElementById('cameraCanvas');
+        canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+        canvas.getContext('2d').drawImage(video, 0, 0);
+        canvas.toBlob(function(blob) {
+            var file = new File([blob], 'capture.jpg', { type: 'image/jpeg' });
+            closeCamera();
+            processImage(file);
+        }, 'image/jpeg', 0.9);
+    }
+
+    // ============================================================
+    // PROGRESS BAR
+    // ============================================================
+    var progressTimer = null;
+    function startProgress(start, end, duration) {
+        var current = start;
+        var step = (end - start) / (duration / 200);
+        clearInterval(progressTimer);
+        progressTimer = setInterval(function() {
+            current += step + Math.random() * step * 0.5;
+            if (current >= end) { current = end; clearInterval(progressTimer); }
+            setProgress(current);
+        }, 200);
+    }
+
+    function setProgress(val) {
+        val = Math.min(100, Math.max(0, val));
+        document.getElementById('progressBar').style.width = val + '%';
+        document.getElementById('progressText').textContent = Math.round(val) + '%';
+    }
+
+    function setLoadingMessage(title, text) {
+        document.getElementById('loadingTitle').textContent = title;
+        document.getElementById('loadingText').textContent = text;
+    }
+
+    // ============================================================
+    // MAIN ANALYZE FUNCTION — Plant.id API v3
+    // ============================================================
+    async function analyzeImage() {
+        if (!plantIdApiKey) {
+            alert('يرجى إدخال مفتاح Plant.id API في الإعدادات أولاً!');
+            openSettings();
+            return;
+        }
+        if (!selectedImage) { alert('يرجى اختيار صورة أولاً!'); return; }
+
+        // Show loading
+        document.getElementById('uploadArea').classList.add('hidden');
+        document.getElementById('loadingState').classList.remove('hidden');
+        document.getElementById('resultsSection').classList.add('hidden');
+        setProgress(0);
+        startProgress(0, 40, 2000);
+        setLoadingMessage('🔄 جاري رفع الصورة...', 'يتم إرسال الصورة إلى نظام التحليل');
+
+        try {
+            var base64 = await fileToBase64(selectedImage);
+            if (!base64 || base64.length < 50) throw new Error('فشل في قراءة الصورة');
+
+            // ==== Plant.id API v3 - Identification ====
+            // v3: details go as query params, NOT in the request body
+            setLoadingMessage('🌿 جاري التعرف على النبات...', 'تحليل النبات باستخدام Plant.id API v3');
+            startProgress(40, 70, 2500);
+
+            // v3: details = comma-separated string as single query param
+            var detailsList = ['common_names', 'url', 'image'];
+            if (settings.taxonomy) detailsList.push('taxonomy');
+            if (settings.wiki_description) detailsList.push('description');
+
+            var identifyUrl = 'https://plant.id/api/v3/identification'
+                + '?details=' + detailsList.join(',')
+                + '&language=ar';
+
+            var identifyBody = {
+                images: ['data:image/jpeg;base64,' + base64],
+                similar_images: true
+            };
+
+            var identifyResponse = await fetch(identifyUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Api-Key': plantIdApiKey
+                },
+                body: JSON.stringify(identifyBody)
+            });
+
+            var identifyData;
+            var identifyRawText = await identifyResponse.text();
+            if (!identifyResponse.ok) {
+                var errText = identifyRawText;
+                try { errText = JSON.stringify(JSON.parse(identifyRawText)); } catch(e) { /* keep raw text */ }
+                throw new Error('Plant.id API (' + identifyResponse.status + '): ' + errText.substring(0, 300));
+            }
+            try { identifyData = JSON.parse(identifyRawText); }
+            catch(e) { throw new Error('استجابة غير صالحة من خادم Plant.id'); }
+
+            // ==== Plant.id API v3 - Health Assessment ====
+            setLoadingMessage('🔬 جاري تشخيص صحة النبات...', 'تحليل الأمراض والآفات المحتملة');
+            startProgress(70, 90, 2000);
+
+            // v3 health: details as query params too
+            // v3 health: single comma-separated details param
+            var healthUrl = 'https://plant.id/api/v3/health_assessment'
+                + '?details=description,treatment,classification,common_names,cause'
+                + '&language=ar'
+                + '&health=all';
+
+            var healthBody = {
+                images: ['data:image/jpeg;base64,' + base64],
+                similar_images: true
+            };
+
+            var healthResponse = await fetch(healthUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Api-Key': plantIdApiKey
+                },
+                body: JSON.stringify(healthBody)
+            });
+
+            var healthData = null;
+            var healthRawText = await healthResponse.text();
+            if (healthResponse.ok) {
+                try { healthData = JSON.parse(healthRawText); }
+                catch(e) { console.warn('Health response parse failed'); }
+            } else {
+                // Health assessment may fail independently — proceed without it
+                console.warn('Health assessment failed (' + healthResponse.status + '):', healthRawText.substring(0, 200));
+            }
+
+            // Done
+            clearInterval(progressTimer);
+            setProgress(100);
+
+            currentApiData = { identify: identifyData, health: healthData };
+            setTimeout(function() { displayResults(identifyData, healthData); }, 400);
+
+        } catch(error) {
+            clearInterval(progressTimer);
+            document.getElementById('loadingState').classList.add('hidden');
+            document.getElementById('uploadArea').classList.remove('hidden');
+            
+            var msg = error.message || 'خطأ غير معروف';
+            // Friendly error messages
+            if (msg.includes('401') || msg.includes('403')) msg = 'مفتاح API غير صالح. يرجى التحقق من المفتاح في الإعدادات.';
+            else if (msg.includes('429')) msg = 'تم تجاوز حد الطلبات. يرجى الانتظار قليلاً.';
+            else if (msg.includes('402')) msg = 'الرصيد منتهٍ. يرجى تجديد اشتراكك في Plant.id.';
+            else if (msg.includes('Failed to fetch') || msg.includes('NetworkError')) msg = 'خطأ في الاتصال بالإنترنت.';
+            
+            showError(msg);
+        }
+    }
+
+    function showError(msg) {
+        document.getElementById('uploadArea').classList.remove('hidden');
+        // Show a nice error banner above upload area
+        var existing = document.getElementById('errorBanner');
+        if (existing) existing.remove();
+        var banner = document.createElement('div');
+        banner.id = 'errorBanner';
+        banner.className = 'mx-8 mb-4 p-4 bg-red-50 border border-red-300 rounded-2xl text-red-700 text-sm flex items-start gap-3 fade-in';
+        banner.innerHTML = '<span class="text-xl flex-shrink-0">⚠️</span><div><p class="font-bold mb-1">حدث خطأ</p><p>' + msg + '</p></div>';
+        document.getElementById('uploadArea').insertAdjacentElement('beforebegin', banner);
+        setTimeout(function() { if (banner.parentNode) banner.remove(); }, 8000);
+    }
+
+    function fileToBase64(file) {
+        return new Promise(function(resolve, reject) {
+            var reader = new FileReader();
+            reader.onload = function() { resolve(reader.result.split(',')[1]); };
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+        });
+    }
+
+    // ============================================================
+    // DISPLAY RESULTS — Parse Plant.id v3 response structure
+    // ============================================================
+    function displayResults(identifyData, healthData) {
+        document.getElementById('loadingState').classList.add('hidden');
+        document.getElementById('resultsSection').classList.remove('hidden');
+
+        // --- Parse v3 identification structure ---
+        // v3: { result: { is_plant: {binary, probability}, classification: { suggestions: [{id, name, probability, details:{common_names, taxonomy, description}}] } } }
+        var result = identifyData.result || {};
+        var isPlant = result.is_plant;
+        var isPlantBool = isPlant ? (isPlant.binary !== undefined ? isPlant.binary : isPlant.probability > 0.5) : true;
+        var isPlantProb = isPlant ? isPlant.probability : 1;
+
+        var classification = result.classification || {};
+        var suggestions = classification.suggestions || [];
+        var topSuggestion = suggestions[0] || null;
+
+        // --- Parse v3 health structure ---
+        // v3 health: { result: { is_healthy: {binary, probability}, disease: { suggestions: [{id, name, probability, details:{description, treatment, classification}}] } } }
+        var healthResult = healthData ? (healthData.result || {}) : {};
+        var isHealthy = healthResult.is_healthy;
+        var isHealthyBool = isHealthy ? (isHealthy.binary !== undefined ? isHealthy.binary : isHealthy.probability > 0.5) : true;
+        var isHealthyProb = isHealthy ? isHealthy.probability : 1;
+        var diseaseData = healthResult.disease || {};
+        var diseaseSuggestions = diseaseData.suggestions || [];
+        var topDisease = diseaseSuggestions[0] || null;
+
+        // Build summary banner
+        buildSummaryBanner(isPlantBool, isHealthyBool, isHealthyProb, topSuggestion, topDisease);
+
+        // Build identification tab
+        buildIdentificationTab(isPlantBool, isPlantProb, suggestions);
+
+        // Build diagnosis tab
+        buildDiagnosisTab(isHealthyBool, isHealthyProb, diseaseSuggestions, topSuggestion);
+
+        // Build treatment tab
+        buildTreatmentTab(isHealthyBool, topDisease, topSuggestion);
+
+        // Switch to identification tab by default
+        switchTab('identification');
+
+        // Trigger Claude if key is available and disease found
+        if (claudeApiKey && (!isHealthyBool || topDisease)) {
+            setTimeout(function() { triggerClaudeAnalysis(topSuggestion, topDisease, isHealthyBool); }, 800);
+        }
+    }
+
+    function buildSummaryBanner(isPlant, isHealthy, healthProb, topSuggestion, topDisease) {
+        var el = document.getElementById('summaryBanner');
+        var plantName = topSuggestion ? (topSuggestion.name || 'نبات غير معروف') : 'غير محدد';
+        var commonName = topSuggestion && topSuggestion.details && topSuggestion.details.common_names && topSuggestion.details.common_names[0];
+
+        if (!isPlant) {
+            el.innerHTML = '<div class="bg-gradient-to-l from-orange-50 to-orange-100 rounded-2xl p-5 border-2 border-orange-300 flex items-center gap-4"><div class="w-14 h-14 bg-gradient-to-br from-orange-400 to-orange-600 rounded-2xl flex items-center justify-center text-3xl">❓</div><div><h3 class="text-xl font-bold text-orange-800">الصورة لا تحتوي على نبات</h3><p class="text-orange-700 text-sm mt-1">يرجى رفع صورة واضحة لنبات.</p></div></div>';
+            return;
+        }
+
+        if (isHealthy) {
+            el.innerHTML = '<div class="bg-gradient-to-l from-green-50 to-green-100 rounded-2xl p-5 border-2 border-green-300 flex items-center gap-4"><div class="w-14 h-14 bg-gradient-to-br from-green-400 to-green-600 rounded-2xl flex items-center justify-center text-3xl">✅</div><div><h3 class="text-xl font-bold text-green-800">النبات سليم ومعافى</h3><p class="text-green-700 text-sm mt-1">' + (commonName || plantName) + ' — لم يتم اكتشاف أي أمراض</p></div><div class="mr-auto text-center"><div class="text-2xl font-bold text-green-700">' + (healthProb * 100).toFixed(0) + '%</div><div class="text-xs text-green-600">نسبة الصحة</div></div></div>';
+        } else {
+            var diseaseName = topDisease ? (topDisease.name || 'مرض غير محدد') : 'حالة غير محددة';
+            var severity = topDisease ? (topDisease.probability > 0.7 ? 'شديدة' : topDisease.probability > 0.4 ? 'متوسطة' : 'خفيفة') : 'غير محددة';
+            el.innerHTML = '<div class="bg-gradient-to-l from-red-50 to-red-100 rounded-2xl p-5 border-2 border-red-300 flex items-center gap-4"><div class="w-14 h-14 bg-gradient-to-br from-red-400 to-red-600 rounded-2xl flex items-center justify-center text-3xl">⚠️</div><div><h3 class="text-xl font-bold text-red-800">تم اكتشاف مرض</h3><p class="text-red-700 text-sm mt-1">' + diseaseName + ' — ' + (commonName || plantName) + '</p><span class="inline-block mt-1 text-xs px-2 py-0.5 rounded-full bg-red-200 text-red-800 font-bold">شدة ' + severity + '</span></div></div>';
+        }
+    }
+
+    function buildIdentificationTab(isPlant, isPlantProb, suggestions) {
+        var el = document.getElementById('plantInfoContent');
+        var othersEl = document.getElementById('otherSuggestions');
+        var othersList = document.getElementById('otherSuggestionsList');
+
+        if (!isPlant || suggestions.length === 0) {
+            el.innerHTML = '<p class="text-gray-500">لم يتم التعرف على نبات في هذه الصورة. حاول رفع صورة أوضح.</p>';
+            return;
+        }
+
+        var top = suggestions[0];
+        var details = top.details || {};
+        var commonNames = details.common_names || [];
+        var taxonomy = details.taxonomy || {};
+        var description = details.description || details.wiki_description;
+        var descText = typeof description === 'object' ? description.value : description;
+
+        var conf = (top.probability * 100).toFixed(1);
+        var confColor = top.probability > 0.7 ? 'from-green-400 to-green-600' : top.probability > 0.4 ? 'from-yellow-400 to-yellow-600' : 'from-red-400 to-red-600';
+
+        var html = '<div class="flex items-start gap-4">';
+        html += '<div class="flex-1">';
+        html += '<h3 class="text-2xl font-bold text-primary-800 mb-1">' + escapeHtml(top.name || 'غير معروف') + '</h3>';
+        if (commonNames.length > 0 && settings.common_names) {
+            html += '<p class="text-gray-600 mb-3 text-sm"><strong>الأسماء الشائعة:</strong> ' + commonNames.slice(0, 5).map(escapeHtml).join(' • ') + '</p>';
+        }
+
+        // Confidence bar
+        html += '<div class="flex items-center gap-3 mb-4"><span class="text-sm text-gray-500 whitespace-nowrap">نسبة التطابق</span><div class="flex-1 max-w-64"><div class="h-3 bg-gray-200 rounded-full overflow-hidden"><div class="confidence-bar h-full bg-gradient-to-l ' + confColor + ' rounded-full" style="width:' + conf + '%"></div></div></div><span class="text-lg font-bold text-primary-600">' + conf + '%</span></div>';
+
+        // Taxonomy
+        if (settings.taxonomy && taxonomy && Object.keys(taxonomy).length > 0) {
+            html += '<div class="flex flex-wrap gap-2 mb-3">';
+            var taxMap = { kingdom: 'المملكة', phylum: 'الشعبة', class: 'الرتبة', order: 'الترتيب', family: 'الفصيلة', genus: 'الجنس', species: 'النوع' };
+            Object.entries(taxMap).forEach(function(entry) {
+                if (taxonomy[entry[0]]) html += '<span class="px-3 py-1.5 bg-primary-100 text-primary-700 rounded-lg text-xs font-medium">' + entry[1] + ': ' + escapeHtml(taxonomy[entry[0]]) + '</span>';
+            });
+            html += '</div>';
+        }
+
+        // Description
+        if (settings.wiki_description && descText) {
+            html += '<p class="text-sm text-gray-600 leading-relaxed mt-3">' + escapeHtml(descText.substring(0, 400)) + (descText.length > 400 ? '...' : '') + '</p>';
+        }
+
+        html += '</div></div>';
+        el.innerHTML = html;
+
+        // Other suggestions
+        if (suggestions.length > 1) {
+            othersEl.classList.remove('hidden');
+            othersList.innerHTML = suggestions.slice(1, 5).map(function(s) {
+                return '<span class="px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg text-sm flex items-center gap-1"><span>' + escapeHtml(s.name || '') + '</span><span class="text-gray-400 text-xs">(' + (s.probability * 100).toFixed(0) + '%)</span></span>';
+            }).join('');
+        }
+    }
+
+    function buildDiagnosisTab(isHealthy, healthProb, diseaseSuggestions, topSuggestion) {
+        var el = document.getElementById('diagnosisContent');
+        var plantName = topSuggestion ? (topSuggestion.name || 'النبات') : 'النبات';
+
+        if (isHealthy) {
+            el.innerHTML = '<div class="bg-gradient-to-l from-green-50 to-white rounded-2xl p-6 border border-green-200"><div class="flex items-center gap-3 mb-4"><div class="text-4xl">🌱</div><div><h3 class="font-bold text-green-800 text-lg">النبات سليم تماماً</h3><p class="text-green-600 text-sm">لم يُكتشف أي مرض أو آفة</p></div></div><div class="grid gap-3 md:grid-cols-3"><div class="bg-green-100 rounded-xl p-4 text-center"><div class="text-2xl font-bold text-green-700">' + (healthProb * 100).toFixed(0) + '%</div><div class="text-xs text-green-600 mt-1">نسبة الصحة</div></div><div class="bg-white rounded-xl p-4 text-center border border-green-200"><div class="text-2xl font-bold text-green-700">✓</div><div class="text-xs text-green-600 mt-1">بدون أمراض</div></div><div class="bg-white rounded-xl p-4 text-center border border-green-200"><div class="text-2xl font-bold text-green-700">✓</div><div class="text-xs text-green-600 mt-1">نمو طبيعي</div></div></div></div>';
+            return;
+        }
+
+        if (!diseaseSuggestions || diseaseSuggestions.length === 0) {
+            el.innerHTML = '<div class="bg-yellow-50 rounded-2xl p-6 border border-yellow-200"><p class="text-yellow-800 font-bold">⚠️ النبات قد يكون مريضاً ولكن لم يتم تحديد المرض بدقة. يُنصح باستشارة متخصص.</p></div>';
+            return;
+        }
+
+        var html = '<div class="space-y-4">';
+        
+        // Main disease
+        var top = diseaseSuggestions[0];
+        var topDetails = top.details || {};
+        var topProb = (top.probability * 100).toFixed(1);
+        var severityClass = top.probability > 0.7 ? 'severity-high' : top.probability > 0.4 ? 'severity-medium' : 'severity-low';
+        var severityText = top.probability > 0.7 ? 'شديد' : top.probability > 0.4 ? 'متوسط' : 'خفيف';
+
+        html += '<div class="bg-gradient-to-l from-red-50 to-white rounded-2xl p-6 border-2 border-red-200">';
+        html += '<div class="flex items-start justify-between mb-3">';
+        html += '<div><h3 class="text-xl font-bold text-red-800">' + escapeHtml(top.name || 'مرض غير محدد') + '</h3>';
+        if (topDetails.common_names && topDetails.common_names.length > 0) {
+            html += '<p class="text-sm text-gray-500 mt-1">يُعرف أيضاً بـ: ' + topDetails.common_names.slice(0,3).map(escapeHtml).join(', ') + '</p>';
+        }
+        html += '</div><div class="text-left"><span class="inline-block px-3 py-1 rounded-full text-sm font-bold ' + severityClass + '">' + severityText + '</span><div class="text-2xl font-bold text-red-700 mt-1">' + topProb + '%</div></div>';
+        html += '</div>';
+
+        // Classification
+        if (topDetails.classification && topDetails.classification.length > 0) {
+            html += '<div class="flex flex-wrap gap-2 mb-3">';
+            topDetails.classification.forEach(function(cls) {
+                html += '<span class="px-2 py-1 bg-red-100 text-red-700 rounded-lg text-xs">' + escapeHtml(cls) + '</span>';
+            });
+            html += '</div>';
+        }
+
+        // Description from API
+        if (topDetails.description) {
+            var descText = typeof topDetails.description === 'object' ? (topDetails.description.value || '') : topDetails.description;
+            if (descText) {
+                html += '<p class="text-sm text-gray-700 leading-relaxed">' + escapeHtml(descText.substring(0, 500)) + (descText.length > 500 ? '...' : '') + '</p>';
+            }
+        } else {
+            // Fallback to local database
+            var localInfo = getDetailedDiseaseInfo(top.name || '');
+            if (localInfo && localInfo.symptoms) {
+                html += '<div class="mt-3"><p class="text-sm font-bold text-gray-700 mb-2">الأعراض المعروفة:</p><ul class="space-y-1">';
+                localInfo.symptoms.slice(0,4).forEach(function(s) {
+                    html += '<li class="flex items-start gap-2 text-sm text-gray-600"><span class="text-red-400 flex-shrink-0">•</span>' + escapeHtml(s) + '</li>';
+                });
+                html += '</ul></div>';
+            }
+        }
+
+        // Cause
+        if (topDetails.cause) {
+            html += '<div class="mt-3 p-3 bg-amber-50 rounded-xl border border-amber-200"><p class="text-sm font-bold text-amber-800 mb-1">السبب:</p><p class="text-sm text-amber-700">' + escapeHtml(topDetails.cause) + '</p></div>';
+        }
+
+        html += '</div>';
+
+        // Other diseases if any
+        if (diseaseSuggestions.length > 1) {
+            html += '<div class="bg-gray-50 rounded-2xl p-4 border border-gray-200"><p class="text-sm font-bold text-gray-700 mb-3">أمراض أخرى محتملة:</p><div class="space-y-2">';
+            diseaseSuggestions.slice(1, 4).forEach(function(d) {
+                html += '<div class="flex items-center justify-between bg-white rounded-xl p-3 border border-gray-100"><span class="text-sm text-gray-700">' + escapeHtml(d.name || '') + '</span><span class="text-sm font-bold text-gray-500">' + (d.probability * 100).toFixed(1) + '%</span></div>';
+            });
+            html += '</div></div>';
+        }
+
+        html += '</div>';
+        el.innerHTML = html;
+    }
+
+    function buildTreatmentTab(isHealthy, topDisease, topSuggestion) {
+        var el = document.getElementById('treatmentContent');
+        var plantName = topSuggestion ? (topSuggestion.name || 'النبات') : 'النبات';
+
+        if (isHealthy) {
+            el.innerHTML = '<div class="bg-gradient-to-l from-green-50 to-white rounded-2xl p-6 border border-green-200"><h3 class="font-bold text-green-800 text-lg mb-4">💚 نصائح للحفاظ على صحة نباتك</h3><div class="space-y-3">' +
+                ['الري المنتظم حسب احتياجات النبات', 'التأكد من توفر إضاءة كافية', 'التسميد الدوري في موسم النمو', 'المراقبة الأسبوعية للأوراق والفروع', 'التهوية الجيدة وعدم الزراعة الكثيفة', 'تنظيف الأوراق من الغبار والأتربة'].map(function(tip, i) {
+                    return '<div class="flex items-start gap-3 bg-white rounded-xl p-3 border border-green-100"><span class="w-7 h-7 bg-green-100 text-green-700 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0">' + (i+1) + '</span><p class="text-gray-700 text-sm">' + tip + '</p></div>';
+                }).join('') + '</div></div>';
+            return;
+        }
+
+        var details = topDisease ? (topDisease.details || {}) : {};
+        var treatment = details.treatment || {};
+        var localInfo = getDetailedDiseaseInfo(topDisease ? (topDisease.name || '') : '');
+
+        var html = '<div class="space-y-4">';
+
+        // Treatment from API v3
+        var hasTreatment = false;
+        if (treatment && typeof treatment === 'object') {
+            // v3 treatment: { biological: [...], chemical: [...], prevention: [...] }
+            var treatmentSections = [
+                { key: 'biological', label: '🌿 العلاج البيولوجي والطبيعي', color: 'green' },
+                { key: 'chemical', label: '🧪 العلاج الكيميائي', color: 'blue' },
+                { key: 'prevention', label: '🛡️ الوقاية', color: 'purple' }
+            ];
+            treatmentSections.forEach(function(section) {
+                var items = treatment[section.key];
+                if (!items) return;
+                if (typeof items === 'string') items = [items];
+                if (!Array.isArray(items) || items.length === 0) return;
+                hasTreatment = true;
+                html += '<div class="bg-' + section.color + '-50 rounded-2xl p-5 border border-' + section.color + '-200">';
+                html += '<h4 class="font-bold text-' + section.color + '-800 mb-3">' + section.label + '</h4>';
+                html += '<div class="space-y-2">';
+                items.forEach(function(item, i) {
+                    html += '<div class="flex items-start gap-3 bg-white rounded-xl p-3 border border-' + section.color + '-100"><span class="w-6 h-6 bg-' + section.color + '-100 text-' + section.color + '-700 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0">' + (i+1) + '</span><p class="text-gray-700 text-sm">' + escapeHtml(typeof item === 'object' ? JSON.stringify(item) : item) + '</p></div>';
+                });
+                html += '</div></div>';
+            });
+        }
+
+        // Fallback to local database
+        if (!hasTreatment && localInfo) {
+            if (localInfo.treatment && localInfo.treatment.length > 0) {
+                html += '<div class="bg-green-50 rounded-2xl p-5 border border-green-200"><h4 class="font-bold text-green-800 mb-3">💊 طرق العلاج الموصى بها</h4><div class="space-y-2">';
+                localInfo.treatment.forEach(function(item, i) {
+                    html += '<div class="flex items-start gap-3 bg-white rounded-xl p-3 border border-green-100"><span class="w-6 h-6 bg-green-100 text-green-700 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0">' + (i+1) + '</span><p class="text-gray-700 text-sm">' + escapeHtml(item) + '</p></div>';
+                });
+                html += '</div></div>';
+            }
+            if (localInfo.prevention && localInfo.prevention.length > 0) {
+                html += '<div class="bg-purple-50 rounded-2xl p-5 border border-purple-200"><h4 class="font-bold text-purple-800 mb-3">🛡️ الوقاية</h4><div class="space-y-2">';
+                localInfo.prevention.forEach(function(item, i) {
+                    html += '<div class="flex items-start gap-3 bg-white rounded-xl p-3 border border-purple-100"><span class="w-6 h-6 bg-purple-100 text-purple-700 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0">' + (i+1) + '</span><p class="text-gray-700 text-sm">' + escapeHtml(item) + '</p></div>';
+                });
+                html += '</div></div>';
+            }
+        }
+
+        if (!hasTreatment && !localInfo) {
+            html += '<div class="bg-yellow-50 rounded-2xl p-5 border border-yellow-200"><p class="text-yellow-800 text-sm">لم يتم العثور على معلومات علاج محددة. يُنصح باستشارة متخصص زراعي.</p></div>';
+        }
+
+        html += '</div>';
+        el.innerHTML = html;
+
+        // Show Claude section if key available
+        if (claudeApiKey) {
+            document.getElementById('claudeSection').classList.remove('hidden');
+        }
+    }
+
+    // ============================================================
+    // TAB SWITCHING
+    // ============================================================
+    function switchTab(tabName) {
+        ['identification', 'diagnosis', 'treatment'].forEach(function(t) {
+            var tab = document.getElementById('tab-' + t);
+            var panel = document.getElementById('panel-' + t);
+            if (t === tabName) {
+                tab.className = tab.className.replace('tab-inactive', 'tab-active');
+                panel.classList.remove('hidden');
+            } else {
+                tab.className = tab.className.replace('tab-active', 'tab-inactive');
+                panel.classList.add('hidden');
+            }
+        });
+    }
+
+    // ============================================================
+    // CLAUDE AI INTEGRATION
+    // ============================================================
+    async function triggerClaudeAnalysis(topSuggestion, topDisease, isHealthy) {
+        var claudeSection = document.getElementById('claudeSection');
+        var claudeOutput = document.getElementById('claudeOutput');
+        var claudeLoading = document.getElementById('claudeLoading');
+
+        claudeSection.classList.remove('hidden');
+        claudeLoading.classList.remove('hidden');
+        claudeOutput.textContent = '';
+        claudeOutput.classList.add('ai-typing');
+
+        var plantName = topSuggestion ? (topSuggestion.name || 'نبات غير معروف') : 'نبات غير معروف';
+        var diseaseName = topDisease ? (topDisease.name || 'مرض غير معروف') : 'لا يوجد مرض';
+        var confidence = topDisease ? (topDisease.probability * 100).toFixed(0) + '%' : 'N/A';
+
+        var prompt = 'أنت خبير زراعي متخصص في أمراض النباتات. قدم تشخيصاً مفصلاً باللغة العربية.\n\n' +
+            'معلومات الحالة:\n' +
+            '- النبات: ' + plantName + '\n' +
+            '- الحالة الصحية: ' + (isHealthy ? 'سليم' : 'مريض') + '\n' +
+            (topDisease ? '- المرض المكتشف: ' + diseaseName + ' (احتمالية: ' + confidence + ')\n' : '') +
+            '\nيرجى تقديم:\n' +
+            '1. وصف مختصر للمرض أو الحالة\n' +
+            '2. الأسباب الجذرية المحتملة (3-4 أسباب)\n' +
+            '3. خطة علاجية مفصلة (5-7 خطوات عملية)\n' +
+            '4. نصائح وقاية للمستقبل (3-4 نصائح)\n' +
+            '5. متى يجب استشارة متخصص\n\n' +
+            'اكتب بأسلوب واضح ومبسط يفهمه المزارع العادي.';
+
+        try {
+            var response = await fetch('https://api.anthropic.com/v1/messages', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'x-api-key': claudeApiKey, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
+                body: JSON.stringify({
+                    model: 'claude-sonnet-4-6',
+                    max_tokens: 1000,
+                    messages: [{ role: 'user', content: prompt }]
+                })
+            });
+
+            var rawText = await response.text();
+            if (!response.ok) {
+                var errMsg = 'خطأ ' + response.status;
+                try { var errData = JSON.parse(rawText); if (errData.error) errMsg = errData.error.message; } catch(e) {}
+                throw new Error(errMsg);
+            }
+
+            var data;
+            try { data = JSON.parse(rawText); } catch(e) { throw new Error('استجابة غير صالحة من Claude'); }
+            var text = data.content && data.content[0] && data.content[0].text || 'لم يتم الحصول على استجابة.';
+            claudeOutput.classList.remove('ai-typing');
+            claudeOutput.textContent = text;
+
+        } catch(err) {
+            claudeOutput.classList.remove('ai-typing');
+            claudeOutput.textContent = '⚠️ تعذر الحصول على التحليل الذكي: ' + err.message;
+        } finally {
+            claudeLoading.classList.add('hidden');
+        }
+    }
+
+    // ============================================================
+    // LOCAL DISEASE DATABASE (fallback)
+    // ============================================================
+    function getDetailedDiseaseInfo(diseaseName) {
+        var d = (diseaseName || '').toLowerCase();
+        
+        var db = {
+            rust: { keywords: ['rust','صدأ','puccinia'], symptoms: ['بقع برتقالية أو صفراء على الأوراق','بقع دائرية مع حواف داكنة','تجعد وتعرج الأوراق','تساقط مبكر للأوراق'], causes: ['فطريات Puccinia','الرطوبة العالية مع دفء الجو','ضعف التهوية'], treatment: ['إزالة الأوراق المصابة فوراً','رش بمحلول كبريت نحاسي','استخدام مبيدات فطرية كالمانكوزيب','رش بمستخلص الثوم المركز'], prevention: ['تهوية جيدة بين النباتات','تجنب رش الماء على الأوراق','إزالة بقايا النباتات'] },
+            powdery: { keywords: ['powdery','mildew','بياض','oidium'], symptoms: ['طبقة بيضاء كالمسحوق على الأوراق','تشوه واصفرار الأوراق','جفاف وتساقط الأوراق'], causes: ['فطريات Erysiphe','الجفاف مع ارتفاع الرطوبة الجوية','ضعف التهوية'], treatment: ['رش بمحلول صودا الخبز (1 ملعقة/لتر)','رش بزيت النيم','استخدام مبيدات فطرية كالسيبروكونازول'], prevention: ['تهوية جيدة','تجنب الزراعة الكثيفة','ري صباحي'] },
+            blight: { keywords: ['blight','لفحة','تفحم'], symptoms: ['لفحة وتحول الأوراق إلى اللون البني','ذبول سريع','تعفن الساق'], causes: ['فطريات Phytophthora أو Alternaria','رطوبة عالية','حرارة مفرطة'], treatment: ['إزالة الأجزاء المصابة','رش بمبيد فطري جهازي','تحسين التصريف'], prevention: ['عدم إفراط الري','التهوية الجيدة','دوران المحاصيل'] },
+            leaf_spot: { keywords: ['spot','بقعة','تبقع'], symptoms: ['بقع بنية أو سوداء على الأوراق','حواف صفراء حول البقع','تساقط الأوراق'], causes: ['فطريات أو بكتيريا','رطوبة عالية','إصابات ميكانيكية'], treatment: ['إزالة الأوراق المصابة','رش بمحلول نحاسي','مبيدات فطرية'], prevention: ['تجنب البلل الزائد للأوراق','تهوية جيدة'] },
+            root_rot: { keywords: ['root rot','تعفن الجذور','phytophthora'], symptoms: ['ذبول رغم الري الكافي','اصفرار الأوراق من الأسفل','جذور بنية أو سوداء'], causes: ['إفراط في الري','تصريف سيئ','فطريات تربة'], treatment: ['تقليل الري فوراً','تحسين تصريف التربة','مبيدات فطرية للتربة','إزالة الجذور المصابة'], prevention: ['ري معتدل','تصريف جيد','تعقيم التربة'] },
+            chlorosis: { keywords: ['chloros','كلور','اصفرار','yellowing'], symptoms: ['اصفرار الأوراق مع عروق خضراء','ضعف النمو','تغير لون الثمار'], causes: ['نقص الحديد أو المغنيسيوم','تربة قلوية','رطوبة زائدة في الجذور'], treatment: ['رش بأسمدة ورقية بالحديد','إضافة الكومبوست','تصحيح حموضة التربة'], prevention: ['تسميد متوازن','فحص التربة دورياً'] },
+            aphid: { keywords: ['aphid','من','حشرة'], symptoms: ['حشرات صغيرة على الأوراق الجديدة','تجعد واصفرار الأوراق','إفرازات لزجة'], causes: ['حشرات المن','ارتفاع درجة الحرارة','نقص المفترسات الطبيعية'], treatment: ['رش بمحلول صابون السوائل المخفف','رش بزيت النيم','استخدام مبيدات حشرية مناسبة'], prevention: ['زراعة نباتات طاردة كالريحان','تشجيع الحشرات النافعة'] }
+        };
+
+        for (var key in db) {
+            var entry = db[key];
+            for (var i = 0; i < entry.keywords.length; i++) {
+                if (d.includes(entry.keywords[i])) return { symptoms: entry.symptoms, causes: entry.causes, treatment: entry.treatment, prevention: entry.prevention };
+            }
+        }
+
+        // Generic fallback
+        return {
+            symptoms: ['تغير لون الأوراق','ضعف النمو العام','ظهور بقع أو آفات'],
+            causes: ['بيئة غير مناسبة','ري غير منتظم','نقص التغذية','إصابة بالأمراض'],
+            treatment: ['تحسين ظروف البيئة','ضبط نظام الري','تطبيق علاج مناسب بعد التشخيص','متابعة مستمرة'],
+            prevention: ['الري الصحيح','التسميد المنتظم','الفحص الدوري','نظافة المكان']
+        };
+    }
+
+    function escapeHtml(str) {
+        if (typeof str !== 'string') return '';
+        return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    // ============================================================
+    // RESET
+    // ============================================================
+    function resetApp() {
+        selectedImage = null;
+        currentApiData = null;
+        document.getElementById('resultsSection').classList.add('hidden');
+        document.getElementById('loadingState').classList.add('hidden');
+        document.getElementById('uploadArea').classList.remove('hidden');
+        document.getElementById('uploadContent').classList.remove('hidden');
+        document.getElementById('previewContent').classList.add('hidden');
+        document.getElementById('fileInput').value = '';
+        setProgress(0);
+        var err = document.getElementById('errorBanner');
+        if (err) err.remove();
+    }
+    </script>
+</body>
+</html>
